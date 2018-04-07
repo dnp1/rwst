@@ -2,21 +2,23 @@ use std::slice::Iter;
 use std::cmp::Ordering;
 use std::cmp::Ord;
 
-struct Tree<T> {
+struct Node<T> {
     index: T,
-    children: Forest<T>
+    children: NodeSet<T>
 }
 
 
-struct Forest<T>(Vec<Tree<T>>);
+struct NodeSet<T> {
+    nodes: Vec<Node<T>>
+}
 
 
 
-impl<T> Forest<T>
+impl<T> NodeSet<T>
     where T: Ord + Clone  {
-    fn lookup(&self, elements: &[T]) -> Ordering {
-        for tree in &self.0 {
-            match tree.contains(&elements) {
+    fn lookup(&self, path: &[T]) -> Ordering {
+        for node in &self.nodes {
+            match node.contains(&path) {
                 Ordering::Greater => return Ordering::Greater,
                 Ordering::Equal => return Ordering::Equal,
                 Ordering::Less => continue,
@@ -25,18 +27,18 @@ impl<T> Forest<T>
         return Ordering::Less;
     }
 
-    fn append(&mut self, elements: &[T]) -> Ordering {
-        for tree in &mut self.0 {
-            match tree.append(&elements) {
+    fn add(&mut self, path: &[T]) -> Ordering {
+        for root in &mut self.nodes {
+            match root.try_add(&path) {
                 Ordering::Greater => break,
                 Ordering::Equal => return Ordering::Equal,
                 Ordering::Less => continue,
             }
         }
-        match Tree::new(elements) {
+        match Node::new(path) {
             Some(t) => {
-                self.0.push(t);
-                self.0.sort();
+                self.nodes.push(t);
+                self.nodes.sort();
                 Ordering::Equal
             }
             None => Ordering::Equal
@@ -44,58 +46,58 @@ impl<T> Forest<T>
     }
 }
 
-impl <T> std::cmp::Eq for Tree<T> where T: Ord {
+impl <T> std::cmp::Eq for Node<T> where T: Ord {
 
 }
-impl <T> std::cmp::Ord for Tree<T> where T: Ord {
+impl <T> std::cmp::Ord for Node<T> where T: Ord {
     fn cmp(&self, other: &Self) -> Ordering {
         self.index.cmp(&other.index)
     }
 }
 
-impl <T> std::cmp::PartialEq for Tree<T> where T: Ord {
+impl <T> std::cmp::PartialEq for Node<T> where T: Ord {
     fn eq(&self, other: &Self) -> bool {
         self.index.cmp(&other.index) == Ordering::Equal
     }
 }
 
 
-impl <T> std::cmp::PartialOrd for Tree<T> where T: Ord {
+impl <T> std::cmp::PartialOrd for Node<T> where T: Ord {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.index.cmp(&other.index))
     }
 }
-impl<T> Tree<T>
+impl<T> Node<T>
     where T: Ord + Clone {
     //Check if the tree contains slice
 
-    fn new(elements: &[T]) -> Option<Self> {
-        match elements.first() {
+    fn new(path: &[T]) -> Option<Self> {
+        match path.first() {
             Some(index) => {
                 let index: T = index.clone();
-                let mut t = Tree{index, children: Forest(Vec::new())};
-                t.append_if_root_matches(&elements[1..]);
+                let mut t = Node {index, children: NodeSet { nodes: Vec::new()}};
+                t.try_add(&path[1..]);
                 Some(t)
             }
             None => None
         }
     }
-    fn append_if_root_matches(&mut self, elements: &[T]) -> Ordering {
-        match elements.first() {
+    fn try_add(&mut self, path: &[T]) -> Ordering {
+        match path.first() {
             Some(index) => match self.index.cmp(&index) {
-                Ordering::Equal => self.children.append(&elements[1..]),
+                Ordering::Equal => self.children.add(&path[1..]),
                 Ordering::Less => Ordering::Less,
                 Ordering::Greater => Ordering::Greater
             },
             None => Ordering::Less
         }
     }
-    fn contains(&self, elements: &[T]) -> Ordering {
-        match &elements.first() {
+    fn contains(&self, path: &[T]) -> Ordering {
+        match &path.first() {
             &Some(ref element) => {
                 let ord = self.index.cmp(element);
                 if let Ordering::Equal = ord {
-                    return self.children.lookup(&elements[1..])
+                    return self.children.lookup(&path[1..])
                 }
                 ord
             }
