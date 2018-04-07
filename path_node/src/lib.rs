@@ -16,6 +16,10 @@ struct NodeSet<T> {
 
 impl<T> NodeSet<T>
     where T: Ord + Clone  {
+
+    fn new() -> Self {
+        NodeSet{nodes: Vec::new()}
+    }
     fn lookup(&self, path: &[T]) -> Ordering {
         for node in &self.nodes {
             match node.contains(&path) {
@@ -115,12 +119,19 @@ mod tests {
         }
     }
 
+    fn test_tree() {
+
+    }
+
     #[test]
     fn it_works() {
         let mut i: Vec<_> = [1, 2, 3, 5, 6].iter().collect();
         let mut it = i.into_iter();
         print_all(it.as_slice());
         print_all(it.as_slice());
+
+
+
 
 
         assert_eq!(2 + 2, 4);
