@@ -2,27 +2,35 @@ use std::slice::Iter;
 use std::cmp::Ordering;
 use std::cmp::Ord;
 
-struct Node<T> {
-    index: T,
-    children: NodeSet<T>
+struct Node<I, V> {
+    index: I,
+    value: Option<V>,
+    children: NodeSet<I, V>,
 }
 
 
-struct NodeSet<T> {
-    nodes: Vec<Node<T>>
+struct NodeSet<I, V> {
+    nodes: Vec<Node<I, V>>
 }
 
 
-
-impl<T> NodeSet<T>
-    where T: Ord + Clone  {
-
+impl<I, V> NodeSet<I, V>
+    where I: Ord + Clone + std::fmt::Debug, V: Clone
+{
     fn new() -> Self {
-        NodeSet{nodes: Vec::new()}
+        NodeSet { nodes: Vec::new() }
     }
-    fn lookup(&self, path: &[T]) -> Ordering {
+
+    fn contains<T> (&self, path: T) -> bool where T: Iterator<Item=I> + Clone {
+        match self.lookup(path)   {
+            Ordering::Equal => true,
+            _ => false
+        }
+    }
+
+    fn lookup<T>(&self, path: T) -> Ordering where T: Iterator<Item=I> + Clone {
         for node in &self.nodes {
-            match node.contains(&path) {
+            match node.contains(path.clone()) {
                 Ordering::Greater => return Ordering::Greater,
                 Ordering::Equal => return Ordering::Equal,
                 Ordering::Less => continue,
@@ -31,81 +39,98 @@ impl<T> NodeSet<T>
         return Ordering::Less;
     }
 
-    fn add(&mut self, path: &[T]) -> Ordering {
+    fn add<T>(&mut self, path: T, value: Option<V>) -> Option<Ordering> where T: Iterator<Item=I> + Clone {
         for root in &mut self.nodes {
-            match root.try_add(&path) {
-                Ordering::Greater => break,
-                Ordering::Equal => return Ordering::Equal,
-                Ordering::Less => continue,
+            match root.try_add(path.clone(), value.clone()) {
+                Some(ord) => match ord {
+                    Ordering::Greater => break,
+                    Ordering::Equal => return Some(Ordering::Equal),
+                    Ordering::Less => continue,
+                },
+                None => return None,
             }
         }
-        match Node::new(path) {
+
+        match Node::new(path, value) {
             Some(t) => {
                 self.nodes.push(t);
                 self.nodes.sort();
-                Ordering::Equal
+                Some(Ordering::Equal)
             }
-            None => Ordering::Equal
+            None => None
         }
     }
 }
 
-impl <T> std::cmp::Eq for Node<T> where T: Ord {
+impl<I, V> std::cmp::Eq for Node<I, V> where I: Ord {}
 
-}
-impl <T> std::cmp::Ord for Node<T> where T: Ord {
+impl<I, V> std::cmp::Ord for Node<I, V> where I: Ord {
     fn cmp(&self, other: &Self) -> Ordering {
         self.index.cmp(&other.index)
     }
 }
 
-impl <T> std::cmp::PartialEq for Node<T> where T: Ord {
+impl<I, V> std::cmp::PartialEq for Node<I, V> where I: Ord {
     fn eq(&self, other: &Self) -> bool {
         self.index.cmp(&other.index) == Ordering::Equal
     }
 }
 
 
-impl <T> std::cmp::PartialOrd for Node<T> where T: Ord {
+impl<I, V> std::cmp::PartialOrd for Node<I, V> where I: Ord {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.index.cmp(&other.index))
     }
 }
-impl<T> Node<T>
-    where T: Ord + Clone {
+
+impl<I, V> Node<I, V>
+    where I: Ord + Clone + std::fmt::Debug, V: Clone
+{
     //Check if the tree contains slice
 
-    fn new(path: &[T]) -> Option<Self> {
-        match path.first() {
+    fn new<T>(mut path: T, value: Option<V>) -> Option<Self> where T: Iterator<Item=I> + Clone {
+        match path.next() {
             Some(index) => {
-                let index: T = index.clone();
-                let mut t = Node {index, children: NodeSet { nodes: Vec::new()}};
-                t.try_add(&path[1..]);
+                let index: I = index.clone();
+                let mut t = Node::<I, V> { index, children: NodeSet { nodes: Vec::new() },  value: None };
+                if let None = t.children.add(path, value.clone()) {
+                    t.value = value.clone()
+                }
                 Some(t)
             }
             None => None
         }
     }
-    fn try_add(&mut self, path: &[T]) -> Ordering {
-        match path.first() {
+    fn try_add<T>(&mut self, mut path: T, value: Option<V>) -> Option<Ordering> where T: Iterator<Item=I> + Clone {
+        match path.next() {
             Some(index) => match self.index.cmp(&index) {
-                Ordering::Equal => self.children.add(&path[1..]),
-                Ordering::Less => Ordering::Less,
-                Ordering::Greater => Ordering::Greater
+                Ordering::Equal => self.children.add(path, value),
+                Ordering::Less => Some(Ordering::Less),
+                Ordering::Greater => Some(Ordering::Greater)
             },
-            None => Ordering::Less
+            None => {
+                self.value = value;
+                None
+            }
         }
     }
-    fn contains(&self, path: &[T]) -> Ordering {
-        match &path.first() {
-            &Some(ref element) => {
-                let ord = self.index.cmp(element);
+
+    fn contains<T>(&self, mut path: T) -> Ordering where T: Iterator<Item=I> + Clone {
+        match path.next() {
+            Some(element) => {
+                let ord = self.index.cmp(&element);
                 if let Ordering::Equal = ord {
-                    return self.children.lookup(&path[1..])
+                    if path.clone().count() == 0 {
+                        return Ordering::Equal
+                    }
+                    return self.children.lookup(path);
                 }
                 ord
             }
-            &None => return Ordering::Equal
+            None => {
+                println!("gol!");
+                return Ordering::Equal
+            }
         }
     }
 }
@@ -113,27 +138,16 @@ impl<T> Node<T>
 
 #[cfg(test)]
 mod tests {
-    fn print_all<T: ::std::fmt::Display>(v: &[T]) {
-        for k in v {
-            println!("{}", k)
-        }
-    }
-
-    fn test_tree() {
-
-    }
+    use super::NodeSet;
 
     #[test]
-    fn it_works() {
-        let mut i: Vec<_> = [1, 2, 3, 5, 6].iter().collect();
-        let mut it = i.into_iter();
-        print_all(it.as_slice());
-        print_all(it.as_slice());
-
-
-
-
-
-        assert_eq!(2 + 2, 4);
+    fn test_add_and_lookup() {
+        let mut router = NodeSet::new();
+        const S: &'static str = "/fruta/banana/da-terra";
+        let pieces: ::std::str::Split<_> = S.split("/");
+        let v: Vec<_> = pieces.clone().collect();
+        assert_eq!(v, ["", "fruta", "banana", "da-terra"]);
+        router.add(pieces, Some("dsada"));
+        assert_eq!(router.contains(S.split("/")), true)
     }
 }
