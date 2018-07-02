@@ -1,0 +1,3 @@
+- requirements that we must fit
+- We must be able to resolve a path finding
+- Most important feature is: given a path we must return a handler and a pathInfo

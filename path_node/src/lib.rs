@@ -1,153 +1,84 @@
+extern crate regex;
 use std::slice::Iter;
 use std::cmp::Ordering;
 use std::cmp::Ord;
+use std::fmt::Debug;
+pub use regex::Regex;
 
-struct Node<I, V> {
-    index: I,
-    value: Option<V>,
-    children: NodeSet<I, V>,
+#[derive(Debug)]
+enum Error {
+    InvalidPath
 }
 
-
-struct NodeSet<I, V> {
-    nodes: Vec<Node<I, V>>
+#[derive(Debug)]
+enum NodeIndex {
+    Value(String),
+    Param(Regex),
+    Match(Regex)
 }
 
+#[derive(Debug)]
+struct Node<V> {
+    index: NodeIndex,
+    handler: Option<V>,
+    children: Option<Vec<Node<V>>>,
+}
 
-impl<I, V> NodeSet<I, V>
-    where I: Ord + Clone + std::fmt::Debug, V: Clone
-{
-    fn new() -> Self {
-        NodeSet { nodes: Vec::new() }
+impl <'a>From<&'a str> for NodeIndex {
+    fn from(index_str: &'a str) -> Self {
+        NodeIndex::Value(index_str.to_owned())
+        //TODO: fix_it
     }
+}
 
-    fn contains<T> (&self, path: T) -> bool where T: Iterator<Item=I> + Clone {
-        match self.lookup(path)   {
-            Ordering::Equal => true,
-            _ => false
+const SPLIT_CHAR: &str = "/";
+
+
+impl <V>Node<V> {
+    fn new(index: NodeIndex) -> Self {
+        Node {
+            index,
+            handler: None,
+            children: None
         }
     }
 
-    fn lookup<T>(&self, path: T) -> Ordering where T: Iterator<Item=I> + Clone {
-        for node in &self.nodes {
-            match node.contains(path.clone()) {
-                Ordering::Greater => return Ordering::Greater,
-                Ordering::Equal => return Ordering::Equal,
-                Ordering::Less => continue,
-            }
-        }
-        return Ordering::Less;
-    }
-
-    fn add<T>(&mut self, path: T, value: Option<V>) -> Option<Ordering> where T: Iterator<Item=I> + Clone {
-        for root in &mut self.nodes {
-            match root.try_add(path.clone(), value.clone()) {
-                Some(ord) => match ord {
-                    Ordering::Greater => break,
-                    Ordering::Equal => return Some(Ordering::Equal),
-                    Ordering::Less => continue,
-                },
-                None => return None,
-            }
-        }
-
-        match Node::new(path, value) {
-            Some(t) => {
-                self.nodes.push(t);
-                self.nodes.sort();
-                Some(Ordering::Equal)
-            }
-            None => None
-        }
-    }
-}
-
-impl<I, V> std::cmp::Eq for Node<I, V> where I: Ord {}
-
-impl<I, V> std::cmp::Ord for Node<I, V> where I: Ord {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.index.cmp(&other.index)
-    }
-}
-
-impl<I, V> std::cmp::PartialEq for Node<I, V> where I: Ord {
-    fn eq(&self, other: &Self) -> bool {
-        self.index.cmp(&other.index) == Ordering::Equal
-    }
-}
-
-
-impl<I, V> std::cmp::PartialOrd for Node<I, V> where I: Ord {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.index.cmp(&other.index))
-    }
-}
-
-impl<I, V> Node<I, V>
-    where I: Ord + Clone + std::fmt::Debug, V: Clone
-{
-    //Check if the tree contains slice
-
-    fn new<T>(mut path: T, value: Option<V>) -> Option<Self> where T: Iterator<Item=I> + Clone {
+    fn from_path(path: &str) -> Result<Self, Error> {
+        let mut path = path.split(SPLIT_CHAR).filter(|x| x.trim() != "");
         match path.next() {
-            Some(index) => {
-                let index: I = index.clone();
-                let mut t = Node::<I, V> { index, children: NodeSet { nodes: Vec::new() },  value: None };
-                if let None = t.children.add(path, value.clone()) {
-                    t.value = value.clone()
-                }
-                Some(t)
-            }
-            None => None
-        }
-    }
-    fn try_add<T>(&mut self, mut path: T, value: Option<V>) -> Option<Ordering> where T: Iterator<Item=I> + Clone {
-        match path.next() {
-            Some(index) => match self.index.cmp(&index) {
-                Ordering::Equal => self.children.add(path, value),
-                Ordering::Less => Some(Ordering::Less),
-                Ordering::Greater => Some(Ordering::Greater)
+            Some(index_str) => {
+                let first = NodeIndex::from(index_str);
+                Ok(Self::new(first))
             },
-            None => {
-                self.value = value;
-                None
-            }
+            None => Err(Error::InvalidPath)
         }
     }
 
-    fn contains<T>(&self, mut path: T) -> Ordering where T: Iterator<Item=I> + Clone {
-        match path.next() {
-            Some(element) => {
-                let ord = self.index.cmp(&element);
-                if let Ordering::Equal = ord {
-                    if path.clone().count() == 0 {
-                        return Ordering::Equal
-                    }
-                    return self.children.lookup(path);
-                }
-                ord
-            }
-            None => {
-                println!("gol!");
-                return Ordering::Equal
-            }
-        }
+    fn number_of_children(&self) -> u32 {
+        0
     }
 }
-
 
 #[cfg(test)]
 mod tests {
-    use super::NodeSet;
+    use super::{Node, NodeIndex};
 
     #[test]
-    fn test_add_and_lookup() {
-        let mut router = NodeSet::new();
-        const S: &'static str = "/fruta/banana/da-terra";
-        let pieces: ::std::str::Split<_> = S.split("/");
-        let v: Vec<_> = pieces.clone().collect();
-        assert_eq!(v, ["", "fruta", "banana", "da-terra"]);
-        router.add(pieces, Some("dsada"));
-        assert_eq!(router.contains(S.split("/")), true)
+    fn test_after_create_len_is_0() {
+        let mut node = Node::new(NodeIndex::Value("banana".to_owned()));
+        node.handler = Some(10);
+        assert_eq!(0 as u32, node.number_of_children())
+    }
+
+    #[test]
+    fn test_create_from_a_path_work_properly() {
+        let mut node = Node::<i32>::from_path("/banana/abacate").unwrap();
+        assert_eq!("banana", match node.index {
+            NodeIndex::Value(v) => v,
+            _ => "_".to_owned()
+        })
     }
 }
+
+
+
