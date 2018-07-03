@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::cmp::Ord;
 use std::fmt::Debug;
 pub use regex::Regex;
+use std::str::Split;
 
 #[derive(Debug)]
 enum Error {
@@ -31,7 +32,13 @@ impl <'a>From<&'a str> for NodeIndex {
     }
 }
 
+
+
 const SPLIT_CHAR: &str = "/";
+
+fn  split_path<'a>(path: &'a str) -> Split<'a, &'a str> {
+    path.split(SPLIT_CHAR)
+}
 
 
 impl <V>Node<V> {
@@ -57,6 +64,11 @@ impl <V>Node<V> {
     fn number_of_children(&self) -> u32 {
         0
     }
+
+
+    fn contains(&self, path: &str) -> bool {
+
+    }
 }
 
 #[cfg(test)]
@@ -74,9 +86,12 @@ mod tests {
     fn test_create_from_a_path_work_properly() {
         let mut node = Node::<i32>::from_path("/banana/abacate").unwrap();
         assert_eq!("banana", match node.index {
-            NodeIndex::Value(v) => v,
-            _ => "_".to_owned()
-        })
+            NodeIndex::Value(ref v) => v,
+            _ => "_"
+        });
+
+        assert!(node.contains("/banana/"));
+        assert!(node.contains("/banana/abacate"))
     }
 }
 
